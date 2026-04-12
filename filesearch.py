@@ -35,13 +35,12 @@ for datei in ORDNER.iterdir():
 print("Upload abgeschlossen.")
 """
 
-"""
-file_search_store = client.file_search_stores.create(config={'display_name': 'Satzung'})
+
+file_search_store = client.file_search_stores.create(config={'display_name': 'HaqqAI'})
 
 operation = client.file_search_stores.upload_to_file_search_store(
     file_search_store_name=file_search_store.name,
-        file="mhg_dortmund_satzung.pdf"
-
+        file="HaqqAI.txt"
 )
 
 while not operation.done:
@@ -50,9 +49,9 @@ while not operation.done:
 
 
 print(f"Fertig! Store-ID: {file_search_store.name}")  # ← diese Zeile bleibt!
-"""
 
 
+""""
 client.file_search_stores.delete(
     name="fileSearchStores/satzung-zofem9s9cwoi",
     config={"force": True}
@@ -76,6 +75,7 @@ client.file_search_stores.delete(
 print("Store gelöscht.")
 
 
+"""
 
 print("Vorhandene Stores:")
 for store in client.file_search_stores.list():
