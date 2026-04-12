@@ -218,33 +218,4 @@ if __name__ == "__main__":
     print(f"Chat-Backend läuft auf http://{HOST}:{PORT}")
     print(f"Geladene Stores ({len(STORE_IDS)}): {STORE_IDS}")
 
-    # --- DEBUG ---
-    print("\n--- Store-Debug ---")
-    try:
-        test_response = CLIENT.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[types.Content(
-                role="user",
-                parts=[types.Part(text="Was ist HaqqAI?")]
-            )],
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(
-                    file_search=types.FileSearch(
-                        file_search_store_names=STORE_IDS
-                    )
-                )],
-            ),
-        )
-        print("Antwort:", test_response.text[:300])
-        try:
-            chunks = test_response.candidates[0].grounding_metadata.grounding_chunks
-            titles = [getattr(c.retrieved_context, "title", "?") for c in (chunks or [])]
-            print("Gefundene Quellen:", titles)
-        except Exception:
-            print("Keine Quellen gefunden.")
-    except Exception as e:
-        print("Fehler beim Debug:", e)
-    print("-------------------\n")
-    # --- ENDE DEBUG ---
-
     server.serve_forever()
