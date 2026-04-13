@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import json
 import os
 
-ENV_PATH = r"C:\Ibra\Projects\vibe coding\API\.env"
+load_dotenv()
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("PORT", 8080))
 SYSTEM_INSTRUCTION = """
