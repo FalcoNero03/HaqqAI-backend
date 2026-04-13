@@ -6,7 +6,7 @@ import json
 import os
 
 ENV_PATH = r"C:\Ibra\Projects\vibe coding\API\.env"
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = int(os.environ.get("PORT", 8080))
 SYSTEM_INSTRUCTION = """
 Du bist HaqqAI – ein KI-Assistent der MHG Dortmund, entwickelt von Albo aka FalcoNero.
