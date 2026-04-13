@@ -41,7 +41,7 @@ Wenn jemand fragt wer du bist, was HaqqAI bedeutet oder wer dich entwickelt hat:
 
 
 def load_client_and_stores():
-    load_dotenv(ENV_PATH)
+    load_dotenv()
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     store_ids = []
