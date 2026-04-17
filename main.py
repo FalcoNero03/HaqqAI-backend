@@ -4,6 +4,8 @@ from google.genai import types
 from dotenv import load_dotenv
 import json
 import os
+import smtplib
+from email.message import EmailMessage
 
 load_dotenv()
 HOST = "0.0.0.0"
@@ -125,6 +127,49 @@ def extract_sources(response):
     return sources
 
 
+def send_feedback_email(category, message, contact, sent_at):
+    """
+    Sendet das Feedback per Gmail.
+
+    Benötigte Umgebungsvariablen (in Google Cloud Run unter
+    "Edit & Deploy new revision" → "Variables & Secrets" eintragen):
+
+        GMAIL_USER          deine.adresse@gmail.com
+        GMAIL_APP_PASSWORD  xxxx xxxx xxxx xxxx   (Google App-Passwort, 16 Zeichen)
+        FEEDBACK_TO         deine.adresse@gmail.com  (wohin die Mail geht)
+    """
+    gmail_user = os.environ.get("GMAIL_USER", "").strip()
+    gmail_password = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+    feedback_to = os.environ.get("FEEDBACK_TO", "").strip()
+
+    if not gmail_user or not gmail_password or not feedback_to:
+        raise RuntimeError(
+            "Fehlende Umgebungsvariablen: GMAIL_USER, GMAIL_APP_PASSWORD und "
+            "FEEDBACK_TO müssen in Google Cloud Run gesetzt sein."
+        )
+
+    msg = EmailMessage()
+    msg["Subject"] = f"[HaqqAI Feedback] {category}"
+    msg["From"] = gmail_user
+    msg["To"] = feedback_to
+
+    body_lines = [
+        "HaqqAI Feedback",
+        "=" * 40,
+        f"Zeitpunkt : {sent_at}",
+        f"Kategorie : {category}",
+        f"Kontakt   : {contact or '—'}",
+        "",
+        "Nachricht:",
+        message,
+    ]
+    msg.set_content("\n".join(body_lines))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(gmail_user, gmail_password)
+        smtp.send_message(msg)
+
+
 class ChatHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, status_code, payload):
@@ -181,10 +226,9 @@ class ChatHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "Not found"})
 
     def do_POST(self):
-        if self.path != "/api/chat":
-            self._send_json(404, {"error": "Endpoint nicht gefunden."})
-            return
-
+        # --------------------------------------------------------
+        # Body einlesen (wird von beiden Endpoints genutzt)
+        # --------------------------------------------------------
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
@@ -193,26 +237,59 @@ class ChatHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "Ungültiger JSON-Body."})
             return
 
-        message = str(payload.get("message", "")).strip()
-        history = payload.get("history") or []
-        session_id = payload.get("session_id")
+        # --------------------------------------------------------
+        # POST /api/feedback  — Feedback per Gmail senden
+        # --------------------------------------------------------
+        if self.path == "/api/feedback":
+            category = str(payload.get("category", "Sonstiges")).strip()
+            message  = str(payload.get("message", "")).strip()
+            contact  = str(payload.get("contact") or "").strip()
+            sent_at  = str(payload.get("sent_at", "")).strip()
 
-        if not message and not history:
-            self._send_json(400, {"error": "'message' oder 'history' wird benötigt."})
+            if not message:
+                self._send_json(400, {"error": "'message' darf nicht leer sein."})
+                return
+
+            try:
+                send_feedback_email(category, message, contact, sent_at)
+                self._send_json(200, {"ok": True})
+            except RuntimeError as exc:
+                # Fehlende Env-Variablen — Konfig-Problem auf dem Server
+                self._send_json(500, {"error": str(exc)})
+            except Exception as exc:
+                self._send_json(500, {"error": f"E-Mail konnte nicht gesendet werden: {exc}"})
             return
 
-        try:
-            answer, response = generate_answer(message, history)
-            self._send_json(
-                200,
-                {
-                    "answer": answer,
-                    "session_id": session_id,
-                    "sources": extract_sources(response),
-                },
-            )
-        except Exception as exc:
-            self._send_json(500, {"error": f"Backend-Fehler: {exc}"})
+        # --------------------------------------------------------
+        # POST /api/chat  — KI-Antwort generieren (unverändert)
+        # --------------------------------------------------------
+        if self.path == "/api/chat":
+            message  = str(payload.get("message", "")).strip()
+            history  = payload.get("history") or []
+            session_id = payload.get("session_id")
+
+            if not message and not history:
+                self._send_json(400, {"error": "'message' oder 'history' wird benötigt."})
+                return
+
+            try:
+                answer, response = generate_answer(message, history)
+                self._send_json(
+                    200,
+                    {
+                        "answer": answer,
+                        "session_id": session_id,
+                        "sources": extract_sources(response),
+                    },
+                )
+            except Exception as exc:
+                self._send_json(500, {"error": f"Backend-Fehler: {exc}"})
+            return
+
+        # --------------------------------------------------------
+        # Alle anderen Pfade
+        # --------------------------------------------------------
+        self._send_json(404, {"error": "Endpoint nicht gefunden."})
 
     def log_message(self, format, *args):
         return
@@ -222,5 +299,4 @@ if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), ChatHandler)
     print(f"Chat-Backend läuft auf http://{HOST}:{PORT}")
     print(f"Geladene Stores ({len(STORE_IDS)}): {STORE_IDS}")
-
     server.serve_forever()
